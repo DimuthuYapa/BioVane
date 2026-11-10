@@ -1,0 +1,2 @@
+# BioVane-Micro-Climate-Shift-Fatigue-Anomaly-Grid
+BioVane: Micro-Climate &amp; Shift Fatigue Anomaly Grid is an advanced, privacy-preserving early warning system designed to protect outdoor, industrial, and logistics workforces (especially in high-heat regions like the GCC) from environmental and occupational health crises before they result in injury, severe heat stress, or operational downtime.
