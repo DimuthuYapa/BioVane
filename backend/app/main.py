@@ -5,6 +5,14 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+
+
+from fastapi import Depends
+from app.security.users import authenticate_user
+from app.security.tokens import create_access_token, verify_access_token
+
+
 
 from app.models import (
     ZoneSnapshot,
@@ -16,6 +24,54 @@ from app.telemetry.workforce import WorkforceProxyCollector
 from app.privacy.guard import PrivacyGuard
 from app.engine.anomaly_detector import BioVaneAnomalyDetector
 from app.decision.rules import DecisionSupportEngine
+bearer_scheme = HTTPBearer(auto_error=False)
+
+def get_current_user(
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(bearer_scheme)
+):
+    if credentials is None:
+        raise HTTPException(
+            status_code=401,
+            detail="Not authenticated",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    payload = verify_access_token(credentials.credentials)
+
+    if payload is None:
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid or expired token",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    username = payload.get("sub")
+
+    if not username:
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid token payload",
+        )
+
+    return {
+       "username": username,
+      "role": payload.get("role")
+}
+
+
+
+
+def require_role(allowed_roles: list):
+    def role_checker(current_user: dict = Depends(get_current_user)):
+
+        if current_user["role"] not in allowed_roles:
+            raise HTTPException(
+                status_code=403,
+                detail="You don't have permission to access this resource"
+            )
+        return current_user
+
+    return role_checker
 
 app = FastAPI(
     title="BioVane: Micro-Climate & Shift Fatigue Anomaly Grid API",
@@ -41,6 +97,9 @@ decision_engine = DecisionSupportEngine()
 
 simulation_state = SimulationConfig(active_scenario="NORMAL")
 directive_status_registry: Dict[str, str] = {}
+class LoginPayload(BaseModel):
+    username: str
+    password: str
 
 class PrivacyConfigPayload(BaseModel):
     k_threshold: int
@@ -51,6 +110,31 @@ class DirectiveUpdatePayload(BaseModel):
 
 class PresetSelectPayload(BaseModel):
     preset_id: str
+@app.post("/api/login")
+def login(payload: LoginPayload):
+    user = authenticate_user(
+        payload.username,
+        payload.password
+    )
+
+    if not user:
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid username or password"
+        )
+
+    token = create_access_token(
+    {
+        "sub": user["username"],
+        "role": user["role"]
+    }
+)
+
+
+    return {
+        "access_token": token,
+        "token_type": "bearer"
+    }
 
 @app.get("/api/health")
 def get_health():
@@ -121,7 +205,11 @@ def get_snapshots():
     return snapshots
 
 @app.get("/api/privacy/audit")
-def get_privacy_audit():
+def get_privacy_audit(
+    current_user: dict = Depends(require_role(["admin"]))
+):
+
+
     climate_readings = climate_collector.get_zone_readings(
         heat_spike_delta=simulation_state.heat_spike_delta_c,
         dust_surge=simulation_state.dust_surge_ugm3
