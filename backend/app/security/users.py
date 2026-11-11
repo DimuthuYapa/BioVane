@@ -1,29 +1,23 @@
+import os
 from app.security.passwords import hash_password, verify_password
 
-# Temporary demo users (development only)
-
-USERS = {
-    "admin": {
-        "username": "admin",
-        "hashed_password": hash_password("BioVane@123"),
-        "role": "admin"
-    },
-    "safety": {
-        "username": "safety",
-        "hashed_password": hash_password("Safety@123"),
-        "role": "safety_supervisor"
-    },
-    "environment": {
-        "username": "environment",
-        "hashed_password": hash_password("Environment@123"),
-        "role": "environment_officer"
-    },
-    "operations": {
-        "username": "operations",
-        "hashed_password": hash_password("Operations@123"),
-        "role": "operations_manager"
-    }
+ROLE_CONFIG = {
+    "admin": ("BIOVANE_ADMIN_PASSWORD", "admin"),
+    "safety": ("BIOVANE_SAFETY_PASSWORD", "safety_supervisor"),
+    "environment": ("BIOVANE_ENVIRONMENT_PASSWORD", "environment_officer"),
+    "operations": ("BIOVANE_OPERATIONS_PASSWORD", "operations_manager"),
 }
+
+USERS = {}
+
+for username, (env_name, role) in ROLE_CONFIG.items():
+    password = os.getenv(env_name)
+    if password:
+        USERS[username] = {
+            "username": username,
+            "hashed_password": hash_password(password),
+            "role": role,
+        }
 
 
 def authenticate_user(username: str, password: str):
@@ -37,7 +31,6 @@ def authenticate_user(username: str, password: str):
 
     return {
         "username": user["username"],
-        "role": user["role"]
+        "role": user["role"],
     }
-
 
